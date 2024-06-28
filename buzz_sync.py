@@ -12,11 +12,12 @@ class CustomFormatter(logging.Formatter):
     datefmt = "%Y-%m-%d %H:%M:%S"
 
     LEVEL_EMOJIS = {
-        logging.DEBUG: "🐞",
+        logging.DEBUG: "🤖",
         logging.INFO: "📰",
         logging.WARNING: "⚠️",
-        logging.ERROR: "❌",
-        logging.CRITICAL: "🔥"
+        logging.ERROR: "❗",
+        logging.CRITICAL: "❌"
+        logging.SUCCESS: "✅"
     }
 
     def format(self, record):
@@ -69,7 +70,7 @@ async def get_torrent_hashes_and_files_page(session, api_key, page):
                             files_info = await files_response.json()
                             selected_files = [file['id'] for file in files_info.get('files', []) if file['selected']]
                             torrents.append((torrent['hash'], selected_files))
-                            logger.info(f"Fetched {len(selected_files)} selected files for torrent {torrent_id}")
+                            logger.debug(f"Fetched {len(selected_files)} selected files for torrent {torrent_id}")
                         else:
                             logger.error(f"Failed to fetch files for torrent {torrent_id}: HTTP {files_response.status}")
             return torrents
@@ -141,7 +142,7 @@ async def add_or_update_torrent_and_select_files(session, api_key, torrent_hash,
     magnet_link = f"magnet:?xt=urn:btih:{torrent_hash}"
     try:
         # Check if the torrent already exists
-        logger.info(f"Checking if torrent {torrent_hash} already exists...")
+        logger.debug(f"Checking if torrent {torrent_hash} already exists...")
         existing_torrents = await fetch_existing_torrents(session, api_key)
         existing_torrent_ids = [t['hash'] for t in existing_torrents]
         if torrent_hash in existing_torrent_ids:
@@ -158,7 +159,7 @@ async def add_or_update_torrent_and_select_files(session, api_key, torrent_hash,
 
                     # If the selected files differ, update them
                     if set(existing_selected_files) != set(file_ids):
-                        logger.info(f"Updating selected files for torrent {torrent_hash}...")
+                        logger.debug(f"Updating selected files for torrent {torrent_hash}...")
                         select_url = f"https://api.real-debrid.com/rest/1.0/torrents/selectFiles/{existing_torrent_id}"
                         async with session.post(select_url, headers=headers, data={"files": ",".join(map(str, file_ids))}) as response:
                             if response.status not in [204, 200]:
@@ -169,7 +170,7 @@ async def add_or_update_torrent_and_select_files(session, api_key, torrent_hash,
                 else:
                     logger.error(f"Failed to fetch files for existing torrent {existing_torrent_id}: HTTP {existing_files_response.status}")
         else:
-            logger.info(f"Adding new torrent {torrent_hash}...")
+            logger.debug(f"Adding new torrent {torrent_hash}...")
 
             # Add the torrent
             add_url = "https://api.real-debrid.com/rest/1.0/torrents/addMagnet"
@@ -208,21 +209,21 @@ async def sync_accounts(primary_api_key, secondary_api_keys):
         logger.info(f"Primary account has {len(primary_torrents)} torrents.")
 
         for api_key in secondary_api_keys:
-            logger.info(f"Syncing with secondary account {api_key}...")
+            logger.info(f"Syncing with secondary accounts...")
             secondary_existing_torrents = await fetch_existing_torrents(session, api_key)
             secondary_hashes = {torrent['hash'] for torrent in secondary_existing_torrents}
 
             tasks = []
             for torrent_hash, file_ids in primary_torrents:
                 if torrent_hash not in secondary_hashes:
-                    logger.info(f"Creating task to add/update torrent {torrent_hash} in secondary account {api_key}...")
+                    logger.debug(f"Creating task to add/update torrent {torrent_hash} in secondary account {api_key}...")
                     tasks.append(add_or_update_torrent_and_select_files(session, api_key, torrent_hash, file_ids))
 
-            logger.info(f"Running {len(tasks)} tasks to sync torrents with secondary account {api_key}...")
+            logger.debug(f"Running {len(tasks)} tasks to sync torrents with secondary account {api_key}...")
             results = await asyncio.gather(*tasks)
             for result, (torrent_hash, _) in zip(results, primary_torrents):
                 if result:
-                    logger.info(f"Added or updated hash {torrent_hash} successfully and selected files.")
+                    logger.success(f"Added or updated hash {torrent_hash} successfully and selected files.")
                 else:
                     logger.error(f"Failed to add or update hash {torrent_hash}.")
 
