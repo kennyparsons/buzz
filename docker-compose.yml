@@ -1,0 +1,16 @@
+version: "3"
+services:
+  buzz:
+    restart: unless-stopped 
+    container_name: buzz 
+    build: .
+    hostname: buzz 
+    environment: 
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    ports:
+      - 5000:5000
+    volumes: 
+      - /opt/buzz:/app/config
+      - /etc/localtime:/etc/localtime:ro

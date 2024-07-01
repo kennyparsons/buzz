@@ -1,0 +1,5 @@
+aiohttp
+asyncio
+python-dotenv
+loguru
+Flask
