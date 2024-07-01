@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buzz Sync</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        @font-face {
+            font-family: 'CustomFont';
+            src: url('/static/custom-font.ttf') format('truetype');
+        }
+
+        body {
+            font-family: 'CustomFont';
+            src: url('/static/custom-font.ttf') format('truetype');
+            background: url('/static/background.jpg') no-repeat center center fixed;
+            background-size: cover;
+            color: #333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #1c87c9;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            border: 2px solid #1c87c9;
+            border-radius: 20px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        input:focus, textarea:focus {
+            border-color: #45a049;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #1c87c9;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .secondary-key {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .secondary-key input {
+            flex: 1;
+            margin-right: 10px;
+        }
+        .secondary-key button {
+            background-color: #f44336;
+        }
+        .secondary-key button:hover {
+            background-color: #e31e1e;
+        }
+        h1, h2 {
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-family: 'CustomFont';
+            src: url('/static/custom-font.ttf') format('truetype');
+            font-size: 48px;
+            color: yellow;  /* Yellow text color */
+            text-shadow: 2px 2px 0 #1c87c9, -2px -2px 0 #1c87c9, 2px -2px 0 #1c87c9, -2px 2px 0 #1c87c9;  /* Blue outline */
+        }
+        pre {
+            text-align: left;
+            background-color: #f8f8f8;
+            padding: 10px;
+            border-radius: 10px;
+            overflow: auto;
+            height: 200px;
+            border: 1px solid #ddd;
+        }
+        nav {
+            margin-top: 20px;
+        }
+        nav a {
+            color: #1c87c9;
+            text-decoration: none;
+            padding: 5px 10px;
+            display: inline-block;
+            border: 2px solid #1c87c9;
+            border-radius: 20px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        nav a:hover {
+            background-color: #1c87c9;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>BUZZ</h1>
+        <h3>Sync Settings</h3>
+        <div class="form-group">
+            <label for="primary-key">Primary RD API Key</label>
+            <input type="text" id="primary-key">
+        </div>
+        <div class="form-group">
+            <label for="secondary-keys">Secondary API Keys</label>
+            <div id="secondary-keys">
+                <div class="secondary-key">
+                    <input type="text" class="secondary-key-input">
+                    <button type="button" onclick="removeSecondaryKey(this)">-</button>
+                </div>
+            </div>
+            <button type="button" onclick="addSecondaryKey()">+</button>
+        </div>
+        <button onclick="updateSettings()">Update Settings</button>
+        <button onclick="startSync()">Start Sync</button>
+        <h2>Logs</h2>
+        <pre id="logs"></pre>
+    </div>
+
+    <script>
+        function addSecondaryKey() {
+            const secondaryKeysDiv = document.getElementById('secondary-keys');
+            const newKeyDiv = document.createElement('div');
+            newKeyDiv.className = 'secondary-key';
+            newKeyDiv.innerHTML = '<input type="text" class="secondary-key-input"><button type="button" onclick="removeSecondaryKey(this)">-</button>';
+            secondaryKeysDiv.appendChild(newKeyDiv);
+        }
+
+        function removeSecondaryKey(button) {
+            button.parentElement.remove();
+        }
+
+        async function updateSettings() {
+            const primaryKey = document.getElementById('primary-key').value;
+            const secondaryKeyInputs = document.getElementsByClassName('secondary-key-input');
+            const secondaryKeys = Array.from(secondaryKeyInputs).map(input => input.value);
+
+            const response = await fetch('/update_env', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ primary_key: primaryKey, secondary_keys: secondaryKeys })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Settings Updated',
+                    text: 'Settings updated successfully!'
+                });
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Failed to update settings.'
+                });
+            }
+        }
+
+        async function startSync() {
+            const response = await fetch('/start_sync', { method: 'POST' });
+            const result = await response.json();
+            if (result.success) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Sync Started',
+                    text: 'Sync started successfully!'
+                });
+                fetchLogs();
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Failed to start sync.'
+                });
+            }
+        }
+
+        async function fetchLogs() {
+            const response = await fetch('/logs');
+            const logs = await response.json();
+            document.getElementById('logs').textContent = logs.join('');
+        }
+
+        function startLogFetching() {
+            fetchLogs();
+            setInterval(fetchLogs, 5000);  // Fetch logs every 5 seconds
+        }
+
+        startLogFetching();  // Start fetching logs when the page loads
+    </script>
+</body>
+</html>
