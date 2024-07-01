@@ -3,77 +3,64 @@ from dotenv import load_dotenv
 import asyncio
 import aiohttp
 import sys
-import logging
-from colorama import Fore, Style, init
+from loguru import logger
 
-# Initialize colorama
-init()
+# Set up loguru logger
+logger.remove()  # Remove the default logger
 
-# Custom logging formatter with timestamp, log level emoji, and message
-class CustomFormatter(logging.Formatter):
-    fmt = "%(asctime)s | %(levelname_emoji)s %(levelname)-8s | %(message)s"
-    datefmt = "%Y-%m-%d %H:%M:%S"
+# Add custom levels if they don't already exist
+if not logger._core.levels.get("SUCCESS"):
+    logger.level("SUCCESS", no=25, color="<light-green>", icon="✅")
+if not logger._core.levels.get("DEBUG"):
+    logger.level("DEBUG", no=10, color="<light-magenta>", icon="🐞")
+if not logger._core.levels.get("INFO"):
+    logger.level("INFO", no=20, color="<light-yellow>", icon="📰")
+if not logger._core.levels.get("WARNING"):
+    logger.level("WARNING", no=30, color="<light-red>", icon="⚠️")
+if not logger._core.levels.get("ERROR"):
+    logger.level("ERROR", no=40, color="<red>", icon="❗")
+if not logger._core.levels.get("CRITICAL"):
+    logger.level("CRITICAL", no=50, color="<bold red>", icon="❌")
 
-    LEVEL_EMOJIS = {
-        logging.DEBUG: "🤖",
-        logging.INFO: "📰",
-        logging.WARNING: "⚠️",
-        logging.ERROR: "❗",
-        logging.CRITICAL: "❌",
-        25: "✅"  # Success level
-    }
+# Add custom logger with color settings
+logger.add(
+    sys.stdout,
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+           "<level>{level.icon} {level: <8}</level> | "
+           "<light-cyan>{message}</light-cyan>",
+    level="DEBUG",
+    colorize=True,
+    backtrace=True,
+    diagnose=True,
+)
 
-    LEVEL_COLORS = {
-        logging.DEBUG: Fore.MAGENTA,  # Light purple
-        logging.INFO: Fore.WHITE,  # Cream color
-        logging.WARNING: Fore.LIGHTRED_EX,  # Light red
-        logging.ERROR: Fore.RED,  # Red
-        logging.CRITICAL: Fore.LIGHTRED_EX + Style.BRIGHT,  # Bold dark red
-        25: Fore.GREEN  # Light lime green
-    }
-
-    def format(self, record):
-        record.levelname_emoji = self.LEVEL_EMOJIS.get(record.levelno, "")
-        log_fmt = self.fmt
-        formatter = logging.Formatter(log_fmt, self.datefmt)
-        formatted = formatter.format(record)
-        color = self.LEVEL_COLORS.get(record.levelno, Fore.WHITE)
-        return color + formatted + Style.RESET_ALL
-
-# Add custom logging level for SUCCESS
-logging.addLevelName(25, "SUCCESS")
-
-def success(self, message, *args, **kws):
-    if self.isEnabledFor(25):
-        self._log(25, message, args, **kws)
-
-logging.Logger.success = success
-
-# Setup logging
-logger = logging.getLogger()
-
-# Clear existing handlers
-logger.handlers = []
-
-# Add custom handler
-handler = logging.StreamHandler()
-handler.setFormatter(CustomFormatter())
-logger.addHandler(handler)
+# Load environment variables from .env file
+load_dotenv()
 
 # Set log level based on environment variable
-load_dotenv()
 log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
-logger.setLevel(getattr(logging, log_level, logging.INFO))
+logger.remove()  # Remove the default logger
+logger.add(
+    sys.stdout,
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+           "<level>{level.icon} {level: <8}</level> | "
+           "<light-cyan>{message}</light-cyan>",
+    level=log_level,
+    colorize=True,
+    backtrace=True,
+    diagnose=True,
+)
 
 # Function to retry API calls with exponential backoff
 async def retry_api_call(func, *args, retries=5, backoff_in_seconds=1, **kwargs):
-    for i in range(retries):
+    for attempt in range(retries):
         try:
             return await func(*args, **kwargs)
         except (aiohttp.ClientError, aiohttp.ClientResponseError) as e:
-            logger.error(f"API call failed: {e}. Retrying in {backoff_in_seconds} seconds...")
+            logger.error(f"API call failed: {e}. Retrying in {backoff_in_seconds} seconds (attempt {attempt + 1}/{retries})...")
             await asyncio.sleep(backoff_in_seconds)
-            backoff_in_seconds *= 2
+            backoff_in_seconds = min(backoff_in_seconds * 2, 60)  # Cap backoff time to 60 seconds
+    logger.critical(f"API call failed after {retries} retries.")
     return None
 
 # Function to get torrent hashes and selected files for a specific page
@@ -135,6 +122,7 @@ async def get_all_torrent_hashes_and_files(session, api_key):
 
 # Function to fetch all existing torrents for a secondary account
 async def fetch_existing_torrents(session, api_key):
+    logger.debug(f"Fetching existing torrents for secondary account with API key {api_key[:5]}...")
     torrents = []
     page = 1
 
@@ -158,10 +146,12 @@ async def fetch_existing_torrents(session, api_key):
             if len(response_json) < 50:
                 break
 
+    logger.debug(f"Fetched {len(torrents)} existing torrents for secondary account with API key {api_key[:5]}")
     return torrents
 
 # Function to delete a torrent
 async def delete_torrent(session, api_key, torrent_id):
+    logger.debug(f"Deleting torrent ID {torrent_id} from secondary account with API key {api_key[:5]}...")
     if dry_run:
         logger.info(f"Dry run enabled. Skipping deletion of torrent ID {torrent_id}.")
         return None
@@ -173,23 +163,22 @@ async def delete_torrent(session, api_key, torrent_id):
             if response.status != 204:
                 logger.error(f"Failed to delete torrent ID {torrent_id}: HTTP {response.status}")
                 return None
-        return torrent_id
+            return torrent_id
     except aiohttp.ClientError as e:
         logger.error(f"Request failed: {e}")
         return None
 
 # Function to add or update a torrent by its hash and select specified files
-async def add_or_update_torrent_and_select_files(session, api_key, torrent_hash, file_ids):
+async def add_or_update_torrent_and_select_files(session, api_key, existing_torrents, torrent_hash, file_ids):
+    logger.debug(f"Adding or updating torrent {torrent_hash} in secondary account with API key {api_key[:5]}...")
     if dry_run:
         logger.info(f"Dry run enabled. Skipping adding or updating hash {torrent_hash}.")
         return None
 
     headers = {"Authorization": f"Bearer {api_key}"}
     magnet_link = f"magnet:?xt=urn:btih:{torrent_hash}"
+    torrent_id = None
     try:
-        # Check if the torrent already exists
-        logger.debug(f"Checking if torrent {torrent_hash} already exists...")
-        existing_torrents = await fetch_existing_torrents(session, api_key)
         existing_torrent_ids = [t['hash'] for t in existing_torrents]
         if torrent_hash in existing_torrent_ids:
             logger.info(f"Torrent {torrent_hash} already exists. Checking selected files...")
@@ -208,9 +197,10 @@ async def add_or_update_torrent_and_select_files(session, api_key, torrent_hash,
                         logger.debug(f"Updating selected files for torrent {torrent_hash}...")
                         select_url = f"https://api.real-debrid.com/rest/1.0/torrents/selectFiles/{existing_torrent_id}"
                         async with session.post(select_url, headers=headers, data={"files": ",".join(map(str, file_ids))}) as response:
-                            if response.status not in [204, 200]:
+                            if response.status in [204, 202]:
+                                logger.info(f"Selected files updated for torrent {existing_torrent_id}.")
+                            else:
                                 logger.error(f"Failed to update selected files: HTTP {response.status}")
-                                return None
                     else:
                         logger.info(f"Selected files for torrent {torrent_hash} are already up-to-date.")
                 else:
@@ -231,15 +221,16 @@ async def add_or_update_torrent_and_select_files(session, api_key, torrent_hash,
                     return None
 
                 # Delay to ensure the torrent is fully processed
-                await asyncio.sleep(5)
+                await asyncio.sleep(15)
 
                 # Select files to download
                 logger.info(f"Selecting files for new torrent {torrent_id}...")
                 select_url = f"https://api.real-debrid.com/rest/1.0/torrents/selectFiles/{torrent_id}"
                 async with session.post(select_url, headers=headers, data={"files": ",".join(map(str, file_ids))}) as response:
-                    if response.status not in [204, 200]:
+                    if response.status in [204, 202]:
+                        logger.info(f"Selected files updated for torrent {torrent_id}.")
+                    else:
                         logger.error(f"Failed to select files: HTTP {response.status}")
-                        return None
 
         return torrent_id
     except aiohttp.ClientError as e:
@@ -258,6 +249,7 @@ def list_differences(list1, list2):
 
 # Function to sync primary account with secondary accounts
 async def sync_accounts(primary_api_key, secondary_api_keys):
+    logger.debug("Starting account synchronization...")
     async with aiohttp.ClientSession() as session:
         # Get all hashes and selected files from primary account
         logger.info("Fetching all torrent hashes and selected files from primary account...")
@@ -275,7 +267,7 @@ async def sync_accounts(primary_api_key, secondary_api_keys):
 
             # Create tasks for adding/updating torrents
             update_tasks = [
-                add_or_update_torrent_and_select_files(session, api_key, torrent_hash, file_ids)
+                add_or_update_torrent_and_select_files(session, api_key, secondary_existing_torrents, torrent_hash, file_ids)
                 for torrent_hash, file_ids in primary_torrents
                 if torrent_hash in torrents_to_add
             ]
@@ -289,33 +281,21 @@ async def sync_accounts(primary_api_key, secondary_api_keys):
 
             # Combine update and delete tasks
             all_tasks = update_tasks + delete_tasks
-            if all_tasks:
-                logger.debug(f"Running {len(all_tasks)} tasks to sync torrents with secondary accounts...")
-                results = await asyncio.gather(*all_tasks)
-                for result, torrent_hash in zip(results, list(torrents_to_add) + list(torrents_to_delete)):
-                    if result:
-                        if torrent_hash in torrents_to_add:
-                            logger.success(f"Added or updated hash {torrent_hash} successfully and selected files.")
-                        else:
-                            logger.success(f"Deleted torrent ID {result} successfully.")
-                    else:
-                        logger.error(f"Failed to process torrent {torrent_hash}.")
-            else:
-                logger.success(f"No tasks to run. Accounts are already in sync.")
+
+            # Process tasks concurrently
+            results = await asyncio.gather(*all_tasks, return_exceptions=True)
+            for result, task in zip(results, all_tasks):
+                if isinstance(result, Exception):
+                    logger.error(f"Task failed with exception: {result}")
+                else:
+                    logger.success(f"Task completed successfully.")
+
+            logger.success(f"Finished syncing with secondary account {api_key}.")
 
 # Check for --dry-run flag
 dry_run = '--dry-run' in sys.argv
 if dry_run:
     logger.info("Dry run enabled. No changes will be made.")
-
-# Load environment variables from .env file
-if not os.path.exists('.env'):
-    logger.error("Please create a .env file with the following contents:")
-    logger.error("RD_PRIMARY_API_KEY=your_primary_api_key")
-    logger.error("RD_SECONDARY_API_KEYS=your_secondary_api_key1,your_secondary_api_key2")
-    sys.exit(1)
-
-load_dotenv()
 
 # Load primary and secondary API keys from environment variables
 primary_api_key = os.getenv('RD_PRIMARY_API_KEY')
@@ -333,5 +313,12 @@ if secondary_api_keys is None:
 # Split secondary API keys
 secondary_api_keys = secondary_api_keys.split(',')
 
-# Here be dragons
-asyncio.run(sync_accounts(primary_api_key, secondary_api_keys))
+# Main execution with graceful exit handling
+def main():
+    try:
+        asyncio.run(sync_accounts(primary_api_key, secondary_api_keys))
+    except KeyboardInterrupt:
+        logger.warning("Script interrupted by user. Exiting...")
+
+if __name__ == "__main__":
+    main()
