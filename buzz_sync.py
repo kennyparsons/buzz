@@ -5,22 +5,27 @@ import asyncio
 import aiohttp
 from loguru import logger
 
-# Set up loguru logger
-logger.remove()  # Remove the default logger
+# Remove the default logger
+logger.remove()
 
-# Add custom levels if they don't already exist
-if not logger._core.levels.get("SUCCESS"):
-    logger.level("SUCCESS", no=25, color="<light-green>", icon="🚀")
-if not logger._core.levels.get("DEBUG"):
-    logger.level("DEBUG", no=10, color="<light-magenta>", icon="🛰️")
-if not logger._core.levels.get("INFO"):
-    logger.level("INFO", no=20, color="<light-yellow>", icon="🌌")
-if not logger._core.levels.get("WARNING"):
-    logger.level("WARNING", no=30, color="<light-red>", icon="🚨")
-if not logger._core.levels.get("ERROR"):
-    logger.level("ERROR", no=40, color="<red>", icon="❗")
-if not logger._core.levels.get("CRITICAL"):
-    logger.level("CRITICAL", no=50, color="<bold red>", icon="🔫")
+# Define custom levels
+custom_levels = {
+    "SUCCESS": {"no": 25, "color": "<light-green>", "icon": "🚀"},
+    "DEBUG": {"no": 10, "color": "<light-magenta>", "icon": "🛰️ "},
+    "INFO": {"no": 20, "color": "<light-yellow>", "icon": "🌌"},
+    "WARNING": {"no": 30, "color": "<light-red>", "icon": "🚨"},
+    "ERROR": {"no": 40, "color": "<red>", "icon": "❗"},
+    "CRITICAL": {"no": 50, "color": "<bold red>", "icon": "🔫"}
+}
+
+# Remove existing custom levels
+for level_name in custom_levels:
+    if logger._core.levels.get(level_name):
+        logger._core.levels.pop(level_name)
+
+# Add custom levels
+for level_name, level_props in custom_levels.items():
+    logger.level(level_name, no=level_props["no"], color=level_props["color"], icon=level_props["icon"])
 
 # Add custom logger with color settings for console
 logger.add(
@@ -49,7 +54,7 @@ load_dotenv()
 
 # Set log level based on environment variable
 log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
-logger.remove()  # Remove the default logger
+logger.remove()  # Remove existing loggers to reset the configuration
 logger.add(
     sys.stdout,
     format="<green>{time:YYYY-MM-DD}</green> <cyan>{time:HH:mm:ss}</cyan> | "
