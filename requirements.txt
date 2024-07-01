@@ -1,4 +1,5 @@
-python-dotenv
 aiohttp
 asyncio
+dotenv
 loguru
+python-dotenv
