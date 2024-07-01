@@ -1,8 +1,8 @@
 import os
+import sys
 from dotenv import load_dotenv
 import asyncio
 import aiohttp
-import sys
 from loguru import logger
 
 # Set up loguru logger
@@ -10,26 +10,36 @@ logger.remove()  # Remove the default logger
 
 # Add custom levels if they don't already exist
 if not logger._core.levels.get("SUCCESS"):
-    logger.level("SUCCESS", no=25, color="<light-green>", icon="✅")
+    logger.level("SUCCESS", no=25, color="<light-green>", icon="🚀")
 if not logger._core.levels.get("DEBUG"):
-    logger.level("DEBUG", no=10, color="<light-magenta>", icon="🐞")
+    logger.level("DEBUG", no=10, color="<light-magenta>", icon="🛰️")
 if not logger._core.levels.get("INFO"):
-    logger.level("INFO", no=20, color="<light-yellow>", icon="📰")
+    logger.level("INFO", no=20, color="<light-yellow>", icon="🌌")
 if not logger._core.levels.get("WARNING"):
-    logger.level("WARNING", no=30, color="<light-red>", icon="⚠️")
+    logger.level("WARNING", no=30, color="<light-red>", icon="🚨")
 if not logger._core.levels.get("ERROR"):
     logger.level("ERROR", no=40, color="<red>", icon="❗")
 if not logger._core.levels.get("CRITICAL"):
-    logger.level("CRITICAL", no=50, color="<bold red>", icon="❌")
+    logger.level("CRITICAL", no=50, color="<bold red>", icon="🔫")
 
-# Add custom logger with color settings
+# Add custom logger with color settings for console
 logger.add(
     sys.stdout,
-    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+    format="<green>{time:YYYY-MM-DD}</green> <cyan>{time:HH:mm:ss}</cyan> | "
            "<level>{level.icon} {level: <8}</level> | "
            "<light-cyan>{message}</light-cyan>",
     level="DEBUG",
     colorize=True,
+    backtrace=True,
+    diagnose=True,
+)
+
+# Add plain text logger for file
+logger.add(
+    "buzz_sync.log",
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level.icon} {level: <8} | {message}",
+    level="DEBUG",
+    colorize=False,
     backtrace=True,
     diagnose=True,
 )
@@ -42,11 +52,19 @@ log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
 logger.remove()  # Remove the default logger
 logger.add(
     sys.stdout,
-    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+    format="<green>{time:YYYY-MM-DD}</green> <cyan>{time:HH:mm:ss}</cyan> | "
            "<level>{level.icon} {level: <8}</level> | "
            "<light-cyan>{message}</light-cyan>",
     level=log_level,
     colorize=True,
+    backtrace=True,
+    diagnose=True,
+)
+logger.add(
+    "buzz_sync.log",
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level.icon} {level: <8} | {message}",
+    level=log_level,
+    colorize=False,
     backtrace=True,
     diagnose=True,
 )
